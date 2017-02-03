@@ -1,0 +1,54 @@
+install() {
+	local install_type = $1
+	local input_version = $2
+	local installation_dir = $3
+
+	local release_url = "https://github.com/nim-lang/Nim/archive/v${input_version}.zip"
+
+	echo "Getting Nim v${input_version} sources"
+
+	# Get the latest version
+	git clone ${release_path}
+	cd Nim
+	git clone --depth 1 https://github.com/nim-lang/csources
+	cd csources && sh build.sh
+	cd ..
+	bin/nim c koch
+	./koch boot -d:release
+
+	(
+		set -e
+		mkdir -p $installation_dir/bin
+
+		local tmp_download_dir = $(mktemp -d -t nim_tmp)
+		local tmp_zip_path = "${tmp_download_dir}/v${input_version}.zip"
+		local tmp_output_path = "${tmp_download_dir}/Nim-${input_version}"
+
+		# Download to the specified file
+		curl -Lo "${tmp_zip_path}" "${release_url}"
+		unzip "${tmp_zip_path}" -d "${tmp_output_path}"
+
+		cd ${tmp_output_path}
+
+		# Clone the csources project so we can have a base nim to compile nim
+		git clone --depth 1 https://github.com/nim-lang/csources
+
+		cd csources && sh build.sh && cd ..
+
+		echo "Building koch"
+
+		bin/nim c koch
+
+		echo "Bootstrapping Nim compiler for release (as opposed to for debug)"
+
+		./koch boot -d:release
+
+		echo "Building Nimble"
+
+		./koch nimble
+
+		cp bin/* $installation_dir/bin
+
+		echo "Installation of Nim v${input_version} successful!"
+	)
+}
